@@ -25,7 +25,7 @@ if uploaded_file:
                 # Column name mapping (Excel column → Word label)
                 column_mapping = {
                     "Name of VLE": "Name",
-                    "VLE Contact": "Contact No.",
+                    "VLE  Contact No.": "Contact No.",
                     "VLE Address": "Address"
                 }
                 
