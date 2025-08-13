@@ -4,13 +4,13 @@ from docx import Document
 from docx.shared import Pt
 from io import BytesIO
 
-st.title("📄 VLE Data Formatter (Dynamic Settings & Live Preview)")
+st.title("📄 VLE Data Formatter (Dynamic Settings & Live Web Preview)")
 
 # Upload Excel
 uploaded_file = st.file_uploader("📂 Upload your Excel file", type=["xlsx"])
 
 if uploaded_file:
-    df = pd.read_excel(uploaded_file)
+    df = pd.read_excel(uploaded_file, dtype=str)  # Read everything as string to avoid .0 issues
     st.success("✅ Excel uploaded successfully!")
     st.dataframe(df.head())
 
@@ -35,7 +35,7 @@ if uploaded_file:
     )
 
     # Step 4: Font size and layout settings
-    font_size = st.slider("🔠 Font size", min_value=10, max_value=30, value=14)
+    font_size = st.slider("🔠 Font size", min_value=10, max_value=24, value=14)
     records_per_page = st.slider("📃 Records per page", min_value=1, max_value=5, value=1)
 
     # Step 5: Text case option
@@ -54,7 +54,19 @@ if uploaded_file:
         else:
             return str(text)
 
-    # Step 6: Function to create DOCX (can be used for preview and final)
+    def clean_value(val):
+        """Remove .0 from numbers that are integers"""
+        try:
+            if isinstance(val, str):
+                return val.strip()
+            num = float(val)
+            if num.is_integer():
+                return str(int(num))
+            return str(num)
+        except:
+            return str(val)
+
+    # Function to create DOCX
     def create_doc(limit_pages=None):
         doc = Document()
         total_records = len(df) if not limit_pages else min(len(df), limit_pages * records_per_page)
@@ -64,17 +76,16 @@ if uploaded_file:
             for _, row in chunk.iterrows():
                 for col in selected_columns:
                     display_name = apply_case(column_rename_map.get(col, col))
-                    value = apply_case(row[col]) if pd.notna(row[col]) else ""
+                    value = apply_case(clean_value(row[col])) if pd.notna(row[col]) else ""
 
                     p = doc.add_paragraph()
                     run = p.add_run(f"{display_name}: {value}")
                     run.font.size = Pt(font_size)
 
-                    # Bold if in bold list
                     if column_rename_map[col] in bold_fields:
                         run.bold = True
 
-                doc.add_paragraph()  # Spacer between records
+                doc.add_paragraph()
             doc.add_page_break()
 
         output = BytesIO()
@@ -82,17 +93,23 @@ if uploaded_file:
         output.seek(0)
         return output
 
-    # Step 7: Live Preview
+    # Live Web Preview
     st.subheader("👀 Live Preview (First 2 Pages)")
-    preview_output = create_doc(limit_pages=2)
-    st.download_button(
-        "📥 Download Preview (DOCX)",
-        data=preview_output,
-        file_name="Preview_VLE_Output.docx",
-        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    )
+    preview_limit = min(len(df), records_per_page * 2)
+    preview_data = df.iloc[:preview_limit]
 
-    # Step 8: Final Download
+    for idx, row in preview_data.iterrows():
+        for col in selected_columns:
+            display_name = apply_case(column_rename_map.get(col, col))
+            value = apply_case(clean_value(row[col])) if pd.notna(row[col]) else ""
+
+            if column_rename_map[col] in bold_fields:
+                st.markdown(f"**{display_name}: {value}**")
+            else:
+                st.write(f"{display_name}: {value}")
+        st.markdown("---")
+
+    # Final Download Button
     if st.button("🛠️ Generate Final DOCX"):
         final_output = create_doc()
         st.success("✅ Document generated successfully!")
