@@ -35,7 +35,7 @@ if uploaded_file:
     )
 
     # Step 4: Font size and layout settings
-    font_size = st.slider("🔠 Font size", min_value=10, max_value=24, value=14)
+    font_size = st.slider("🔠 Font size", min_value=10, max_value=30, value=14)
     records_per_page = st.slider("📃 Records per page", min_value=1, max_value=5, value=1)
 
     # Step 5: Text case option
