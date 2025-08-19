@@ -31,8 +31,8 @@ if uploaded_file:
     case_option = st.selectbox("Choose case style", ["UPPERCASE", "lowercase", "Proper Case"])
 
     # Font size options
-    font_size_to = st.slider("Font size for TO section", 8, 30, 12)
-    font_size_from = st.slider("Font size for FROM section", 8, 30, 10)
+    font_size_to = st.slider("Font size for TO section", 8, 24, 12)
+    font_size_from = st.slider("Font size for FROM section", 8, 24, 10)
 
     # Bold fields selection
     bold_fields = st.multiselect("Select TO fields to make bold", list(column_rename_map.values()))
@@ -75,9 +75,11 @@ if uploaded_file:
                 run = p.add_run(f"{display_name}: {value}")
                 run.font.size = Pt(font_size_to)
 
+                # ✅ Make entire line bold if selected
                 if display_name in bold_fields:
                     run.bold = True
 
+                # Add blank line if selected
                 if display_name in blank_line_fields:
                     doc.add_paragraph()
 
