@@ -21,11 +21,18 @@ def clean_value(val):
     return str(val)
 
 # -------- DOCX Creator --------
-def create_doc(df, from_column, to_columns, column_rename_map, case_style, from_font_size, to_font_size, bold_fields, blankline_fields):
+def create_doc(df, from_column, to_columns, column_rename_map, case_style,
+               from_label_size, from_font_size,
+               to_label_size, to_font_size,
+               bold_fields, blankline_fields):
     doc = Document()
     for _, row in df.iterrows():
         # -------- FROM Section --------
-        doc.add_paragraph("FROM:")
+        p_from_label = doc.add_paragraph()
+        run_label = p_from_label.add_run("FROM:")
+        run_label.font.size = Pt(from_label_size)
+        run_label.bold = True
+
         if from_column:
             from_text = clean_value(row[from_column]) if pd.notna(row[from_column]) else ""
             from_text = apply_case(from_text, case_style)
@@ -36,7 +43,11 @@ def create_doc(df, from_column, to_columns, column_rename_map, case_style, from_
         doc.add_paragraph()  # spacing between FROM and TO
 
         # -------- TO Section --------
-        doc.add_paragraph("TO:")
+        p_to_label = doc.add_paragraph()
+        run_label2 = p_to_label.add_run("TO:")
+        run_label2.font.size = Pt(to_label_size)
+        run_label2.bold = True
+
         for col in to_columns:
             display_name = apply_case(column_rename_map.get(col, col), case_style)
             value = apply_case(clean_value(row[col]), case_style) if pd.notna(row[col]) else ""
@@ -67,7 +78,8 @@ if uploaded_file:
     # FROM Column
     st.subheader("FROM Section")
     from_column = st.selectbox("Select FROM Address Column", [""] + df.columns.tolist())
-    from_font_size = st.slider("Font Size for FROM Section", 8, 30, 12)
+    from_label_size = st.slider("Font Size for 'FROM:' Label", 8, 30, 12)
+    from_font_size = st.slider("Font Size for FROM Data", 8, 30, 12)
 
     # TO Columns
     st.subheader("TO Section")
@@ -83,8 +95,9 @@ if uploaded_file:
         # Case Style
         case_style = st.radio("Select Case Style", ["UPPERCASE", "lowercase", "Proper Case"])
 
-        # Font Size for TO
-        to_font_size = st.slider("Font Size for TO Section", 8, 30, 12)
+        # Font Sizes
+        to_label_size = st.slider("Font Size for 'TO:' Label", 8, 30, 12)
+        to_font_size = st.slider("Font Size for TO Data", 8, 30, 12)
 
         # Bold Fields
         bold_fields = st.multiselect("Select TO Fields to Make Bold", list(column_rename_map.values()))
@@ -97,18 +110,18 @@ if uploaded_file:
         preview_df = df[[from_column] + to_columns].head(2) if from_column else df[to_columns].head(2)
         for _, row in preview_df.iterrows():
             if from_column:
-                st.markdown("**FROM:**")
-                st.write(apply_case(clean_value(row[from_column]), case_style))
+                st.markdown(f"<span style='font-size:{from_label_size}px; font-weight:bold'>FROM:</span>", unsafe_allow_html=True)
+                st.markdown(f"<span style='font-size:{from_font_size}px'>{apply_case(clean_value(row[from_column]), case_style)}</span>", unsafe_allow_html=True)
 
-            st.markdown("**TO:**")
+            st.markdown(f"<span style='font-size:{to_label_size}px; font-weight:bold'>TO:</span>", unsafe_allow_html=True)
             for col in to_columns:
                 display_name = apply_case(column_rename_map[col], case_style)
                 value = apply_case(clean_value(row[col]), case_style) if pd.notna(row[col]) else ""
 
                 if column_rename_map[col] in bold_fields:
-                    st.markdown(f"**{display_name}: {value}**")
+                    st.markdown(f"<span style='font-size:{to_font_size}px; font-weight:bold'>{display_name}: {value}</span>", unsafe_allow_html=True)
                 else:
-                    st.write(f"{display_name}: {value}")
+                    st.markdown(f"<span style='font-size:{to_font_size}px'>{display_name}: {value}</span>", unsafe_allow_html=True)
 
                 if column_rename_map[col] in blankline_fields:
                     st.text(" ")
@@ -120,7 +133,8 @@ if uploaded_file:
             doc = create_doc(
                 df, from_column, to_columns,
                 column_rename_map, case_style,
-                from_font_size, to_font_size,
+                from_label_size, from_font_size,
+                to_label_size, to_font_size,
                 bold_fields, blankline_fields
             )
 
