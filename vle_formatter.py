@@ -4,147 +4,121 @@ from io import BytesIO
 from docx import Document
 from docx.shared import Pt
 
-# -------- Helper Functions --------
-def apply_case(text, case_style):
-    if case_style == "UPPERCASE":
-        return str(text).upper()
-    elif case_style == "lowercase":
-        return str(text).lower()
-    elif case_style == "Proper Case":
-        return str(text).title()
-    else:
-        return str(text)
+st.title("📄 Excel → Word (TO/FROM Labels) Generator")
 
-def clean_value(val):
-    if isinstance(val, float) and val.is_integer():
-        return str(int(val))  # fix PINCODE 781128.0 → 781128
-    return str(val)
-
-# -------- DOCX Creator --------
-def create_doc(df, from_column, to_columns, column_rename_map, case_style,
-               from_label_size, from_font_size,
-               to_label_size, to_font_size,
-               bold_fields, blankline_fields):
-    doc = Document()
-    for _, row in df.iterrows():
-        # -------- FROM Section --------
-        p_from_label = doc.add_paragraph()
-        run_label = p_from_label.add_run("FROM:")
-        run_label.font.size = Pt(from_label_size)
-        run_label.bold = True
-
-        if from_column:
-            from_text = clean_value(row[from_column]) if pd.notna(row[from_column]) else ""
-            from_text = apply_case(from_text, case_style)
-            p = doc.add_paragraph()
-            run = p.add_run(from_text)
-            run.font.size = Pt(from_font_size)
-
-        doc.add_paragraph()  # spacing between FROM and TO
-
-        # -------- TO Section --------
-        p_to_label = doc.add_paragraph()
-        run_label2 = p_to_label.add_run("TO:")
-        run_label2.font.size = Pt(to_label_size)
-        run_label2.bold = True
-
-        for col in to_columns:
-            display_name = apply_case(column_rename_map.get(col, col), case_style)
-            value = apply_case(clean_value(row[col]), case_style) if pd.notna(row[col]) else ""
-
-            p = doc.add_paragraph()
-            run = p.add_run(f"{display_name}: {value}")
-            run.font.size = Pt(to_font_size)
-
-            # Bold option
-            if column_rename_map[col] in bold_fields:
-                run.bold = True
-
-            # Blank line option
-            if column_rename_map[col] in blankline_fields:
-                doc.add_paragraph()
-
-        doc.add_page_break()
-    return doc
-
-# -------- Streamlit App --------
-st.title("📄 Excel to Multi-Page Word Generator (FROM / TO Format)")
-
+# Upload Excel file
 uploaded_file = st.file_uploader("Upload Excel File", type=["xlsx"])
+
 if uploaded_file:
     df = pd.read_excel(uploaded_file)
-    st.success(f"File loaded with {df.shape[0]} rows and {df.shape[1]} columns.")
+    st.write("✅ File uploaded. Preview:")
+    st.dataframe(df.head())
 
-    # FROM Column
-    st.subheader("FROM Section")
-    from_column = st.selectbox("Select FROM Address Column", [""] + df.columns.tolist())
-    from_label_size = st.slider("Font Size for 'FROM:' Label", 8, 30, 12)
-    from_font_size = st.slider("Font Size for FROM Data", 8, 30, 12)
+    # Select TO section columns
+    to_columns = st.multiselect("Select TO Section Columns", df.columns)
 
-    # TO Columns
-    st.subheader("TO Section")
-    to_columns = st.multiselect("Select TO Columns", df.columns.tolist())
+    # Select FROM section column (only one)
+    from_column = st.selectbox("Select FROM Section Column", df.columns)
 
-    if to_columns:
-        # Rename Columns
-        st.subheader("Rename TO Columns for Output")
-        column_rename_map = {}
-        for col in to_columns:
-            column_rename_map[col] = st.text_input(f"Rename '{col}' as:", value=col)
+    # Rename columns dynamically
+    st.subheader("📝 Rename TO Columns")
+    column_rename_map = {}
+    for col in to_columns:
+        new_name = st.text_input(f"Rename '{col}' as:", col)
+        column_rename_map[col] = new_name
 
-        # Case Style
-        case_style = st.radio("Select Case Style", ["UPPERCASE", "lowercase", "Proper Case"])
+    # Case style options
+    case_option = st.selectbox("Choose case style", ["UPPERCASE", "lowercase", "Proper Case"])
 
-        # Font Sizes
-        to_label_size = st.slider("Font Size for 'TO:' Label", 8, 30, 12)
-        to_font_size = st.slider("Font Size for TO Data", 8, 30, 12)
+    # Font size options
+    font_size_to = st.slider("Font size for TO section", 8, 30, 12)
+    font_size_from = st.slider("Font size for FROM section", 8, 30, 10)
 
-        # Bold Fields
-        bold_fields = st.multiselect("Select TO Fields to Make Bold", list(column_rename_map.values()))
+    # Bold fields selection
+    bold_fields = st.multiselect("Select TO fields to make bold", list(column_rename_map.values()))
 
-        # Blank Line After Fields
-        blankline_fields = st.multiselect("Select TO Fields After Which to Add Blank Line", list(column_rename_map.values()))
+    # Extra blank line fields
+    blank_line_fields = st.multiselect("Select TO fields after which a blank line should appear", list(column_rename_map.values()))
 
-        # -------- Preview --------
-        st.subheader("🔍 Preview (First 2 Records)")
-        preview_df = df[[from_column] + to_columns].head(2) if from_column else df[to_columns].head(2)
-        for _, row in preview_df.iterrows():
-            if from_column:
-                st.markdown(f"<span style='font-size:{from_label_size}px; font-weight:bold'>FROM:</span>", unsafe_allow_html=True)
-                st.markdown(f"<span style='font-size:{from_font_size}px'>{apply_case(clean_value(row[from_column]), case_style)}</span>", unsafe_allow_html=True)
+    # Apply case formatting function
+    def apply_case(text):
+        if case_option == "UPPERCASE":
+            return str(text).upper()
+        elif case_option == "lowercase":
+            return str(text).lower()
+        elif case_option == "Proper Case":
+            return str(text).title()
+        return str(text)
 
-            st.markdown(f"<span style='font-size:{to_label_size}px; font-weight:bold'>TO:</span>", unsafe_allow_html=True)
+    def clean_value(val):
+        # Prevent float PINCODE like 781128.0 → 781128
+        if isinstance(val, float) and val.is_integer():
+            return str(int(val))
+        return str(val)
+
+    # Function to generate Word doc
+    def create_doc(df, to_columns, from_column):
+        doc = Document()
+
+        for _, row in df.iterrows():
+            # --- TO Section ---
+            p = doc.add_paragraph()
+            run = p.add_run("TO")
+            run.bold = True
+            run.font.size = Pt(font_size_to)
+
             for col in to_columns:
-                display_name = apply_case(column_rename_map[col], case_style)
-                value = apply_case(clean_value(row[col]), case_style) if pd.notna(row[col]) else ""
+                display_name = apply_case(column_rename_map.get(col, col))
+                value = apply_case(clean_value(row[col])) if pd.notna(row[col]) else ""
 
-                if column_rename_map[col] in bold_fields:
-                    st.markdown(f"<span style='font-size:{to_font_size}px; font-weight:bold'>{display_name}: {value}</span>", unsafe_allow_html=True)
-                else:
-                    st.markdown(f"<span style='font-size:{to_font_size}px'>{display_name}: {value}</span>", unsafe_allow_html=True)
+                p = doc.add_paragraph()
+                run = p.add_run(f"{display_name}: {value}")
+                run.font.size = Pt(font_size_to)
 
-                if column_rename_map[col] in blankline_fields:
-                    st.text(" ")
+                if display_name in bold_fields:
+                    run.bold = True
 
-            st.markdown("---")
+                if display_name in blank_line_fields:
+                    doc.add_paragraph()
 
-        # -------- Generate DOCX --------
-        if st.button("Generate Word File"):
-            doc = create_doc(
-                df, from_column, to_columns,
-                column_rename_map, case_style,
-                from_label_size, from_font_size,
-                to_label_size, to_font_size,
-                bold_fields, blankline_fields
-            )
+            # --- FROM Section ---
+            p = doc.add_paragraph()
+            run = p.add_run("FROM")
+            run.bold = True
+            run.font.size = Pt(font_size_from)
 
-            output = BytesIO()
-            doc.save(output)
-            output.seek(0)
+            value = apply_case(clean_value(row[from_column])) if pd.notna(row[from_column]) else ""
+            p = doc.add_paragraph()
+            run = p.add_run(f"{apply_case(from_column)}: {value}")
+            run.font.size = Pt(font_size_from)
 
-            st.download_button(
-                label="📥 Download Word File",
-                data=output,
-                file_name="output.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
+            doc.add_page_break()
+
+        return doc
+
+    # Preview first 2 records in Streamlit
+    st.subheader("👀 Preview (first 2 records)")
+    for i, row in df.head(2).iterrows():
+        st.markdown("### TO")
+        for col in to_columns:
+            display_name = apply_case(column_rename_map.get(col, col))
+            value = apply_case(clean_value(row[col])) if pd.notna(row[col]) else ""
+            if display_name in bold_fields:
+                st.markdown(f"**{display_name}: {value}**")
+            else:
+                st.write(f"{display_name}: {value}")
+            if display_name in blank_line_fields:
+                st.text(" ")
+
+        st.markdown("### FROM")
+        value = apply_case(clean_value(row[from_column])) if pd.notna(row[from_column]) else ""
+        st.write(f"{apply_case(from_column)}: {value}")
+        st.write("---")
+
+    # Download button
+    if st.button("Generate Word File"):
+        doc = create_doc(df, to_columns, from_column)
+        buffer = BytesIO()
+        doc.save(buffer)
+        buffer.seek(0)
+        st.download_button("📥 Download Word File", buffer, "output.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document")
