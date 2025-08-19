@@ -65,7 +65,7 @@ if uploaded_file:
         case_style = st.radio("Select Case Style", ["UPPERCASE", "lowercase", "Proper Case"])
 
         # Font Size
-        font_size = st.slider("Font Size", 8, 24, 12)
+        font_size = st.slider("Font Size", 8, 30, 12)
 
         # Bold Fields
         bold_fields = st.multiselect("Select Fields to Make Bold", list(column_rename_map.values()))
