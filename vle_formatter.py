@@ -50,8 +50,8 @@ if uploaded_file:
     to_columns = st.multiselect("Choose TO fields (order matters)", df.columns.tolist())
 
     st.subheader("FROM Section (appears below TO)")
-    # from_column = st.selectbox("Choose FROM field (single column)", ["(none)"] + df.columns.tolist())
-    from_column = st.multiselect("Choose FROM field",df.columns.tolist())
+    from_column = st.selectbox("Choose FROM field (single column)", ["(none)"] + df.columns.tolist())
+    # from_column = st.multiselect("Choose FROM field",df.columns.tolist())
     use_from = from_column != "(none)"
 
     # --- Renaming TO fields (user labels) ---
