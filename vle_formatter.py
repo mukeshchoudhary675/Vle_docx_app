@@ -3,6 +3,7 @@ import pandas as pd
 from io import BytesIO
 from docx import Document
 from docx.shared import Pt
+from docx.enum.table import WD_ALIGN_VERTICAL
 
 st.title("📄 Excel → Word (TO first, then FROM) — Dynamic Formatting")
 
@@ -18,7 +19,6 @@ def apply_case(text: str, mode: str) -> str:
     return s  # Original
 
 def clean_value(val) -> str:
-    # Handles 781128.0 -> 781128 and trims strings
     if val is None:
         return ""
     try:
@@ -28,9 +28,12 @@ def clean_value(val) -> str:
         pass
     return str(val).strip()
 
-# Build a paragraph line in DOCX with dynamic bold & size
-def add_line(doc, text: str, font_size_pt: int, bold: bool = False):
-    p = doc.add_paragraph()
+def add_line(container, text: str, font_size_pt: int, bold: bool = False):
+    """Add a paragraph line inside a Document or a Table Cell"""
+    if hasattr(container, "add_paragraph"):  # works for doc or cell
+        p = container.add_paragraph()
+    else:
+        p = container.paragraphs[0] if container.paragraphs else container.add_paragraph()
     run = p.add_run(text)
     run.font.size = Pt(font_size_pt)
     run.bold = bold
@@ -40,7 +43,6 @@ def add_line(doc, text: str, font_size_pt: int, bold: bool = False):
 uploaded_file = st.file_uploader("Upload Excel (.xlsx)", type=["xlsx"])
 
 if uploaded_file:
-    # Read as strings to preserve IDs/phone/pincode exactly
     df = pd.read_excel(uploaded_file, dtype=str)
     st.success(f"Loaded {df.shape[0]} rows × {df.shape[1]} columns")
     st.expander("Preview first rows (raw)").dataframe(df.head())
@@ -51,111 +53,106 @@ if uploaded_file:
 
     st.subheader("FROM Section (appears below TO)")
     from_column = st.selectbox("Choose FROM field (single column)", ["(none)"] + df.columns.tolist())
-    # from_column = st.multiselect("Choose FROM field",df.columns.tolist())
     use_from = from_column != "(none)"
 
-    # --- Renaming TO fields (user labels) ---
+    # --- Renaming TO fields ---
     st.subheader("Rename TO Fields (labels shown in output)")
     column_rename_map = {}
     for col in to_columns:
         column_rename_map[col] = st.text_input(f"Rename '{col}' →", value=col, key=f"rename_{col}")
 
-    # --- Text casing for ALL labels & values ---
+    # --- Text casing ---
     st.subheader("Text Casing")
     case_option = st.selectbox("Apply casing to labels & values", ["Original", "UPPERCASE", "Proper Case", "lowercase"])
 
-    # --- Font sizes (4 sliders) ---
+    # --- Font sizes ---
     st.subheader("Font Sizes")
-    to_label_size = st.slider("TO label font size (e.g., 'TO:')", 8, 36, 14)
-    to_data_size  = st.slider("TO lines font size (e.g., 'NAME: MUKESH')", 8, 36, 14)
-    from_label_size = st.slider("FROM label font size (e.g., 'FROM:')", 8, 36, 12)
-    from_data_size  = st.slider("FROM line font size (address line)", 8, 36, 12)
+    to_label_size = st.slider("TO label font size", 8, 36, 14)
+    to_data_size  = st.slider("TO lines font size", 8, 36, 14)
+    from_label_size = st.slider("FROM label font size", 8, 36, 12)
+    from_data_size  = st.slider("FROM line font size", 8, 36, 12)
 
     # --- Bold controls ---
     st.subheader("Bold Settings")
     bold_to_label   = st.checkbox("Make 'TO:' label bold", value=True)
     bold_from_label = st.checkbox("Make 'FROM:' label bold", value=True)
-    # Multiselect uses RAW renamed labels (before casing) to avoid mismatch
     to_labels_list = [column_rename_map[c] for c in to_columns]
     bold_to_fields = st.multiselect("Make these TO lines bold", to_labels_list)
     blankline_after = st.multiselect("Add a blank line after these TO lines", to_labels_list)
     bold_from_line = st.checkbox("Make FROM address line bold", value=False)
 
-    # ---------- Preview (first 2 records) ----------
+    # --- Layout choice ---
+    st.subheader("Page Layout")
+    layout_choice = st.radio("Samples per page", ["1 per page", "4 per page (2×2)", "8 per page (2×4)"])
+
+    # ---------- Preview ----------
     st.subheader("👀 Live Preview (first 2 records)")
     preview_rows = min(2, len(df))
-    if preview_rows == 0:
-        st.info("No data to preview.")
-    else:
-        for i in range(preview_rows):
-            row = df.iloc[i]
+    for i in range(preview_rows):
+        row = df.iloc[i]
+        st.markdown(f"<div style='font-size:{to_label_size}px; font-weight:{'700' if bold_to_label else '400'}'>{apply_case('TO:', case_option)}</div>", unsafe_allow_html=True)
+        for col in to_columns:
+            raw_label = column_rename_map[col]
+            show_label = apply_case(raw_label, case_option)
+            value = apply_case(clean_value(row.get(col, "")), case_option)
+            bold_line = raw_label in bold_to_fields
+            st.markdown(f"<div style='font-size:{to_data_size}px; font-weight:{'700' if bold_line else '400'}'>{show_label}: {value}</div>", unsafe_allow_html=True)
+            if raw_label in blankline_after:
+                st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
+        if use_from:
+            st.markdown(f"<div style='margin-top:8px; font-size:{from_label_size}px; font-weight:{'700' if bold_from_label else '400'}'>{apply_case('FROM:', case_option)}</div>", unsafe_allow_html=True)
+            from_value = apply_case(clean_value(row.get(from_column, "")), case_option)
+            st.markdown(f"<div style='font-size:{from_data_size}px; font-weight:{'700' if bold_from_line else '400'}'>{from_value}</div>", unsafe_allow_html=True)
+        st.markdown("<hr>", unsafe_allow_html=True)
 
-            # TO label
-            to_label_disp = apply_case("TO:", case_option)
-            st.markdown(
-                f"<div style='font-size:{to_label_size}px; font-weight:{'700' if bold_to_label else '400'}'>{to_label_disp}</div>",
-                unsafe_allow_html=True
-            )
-            # TO lines
-            for col in to_columns:
-                raw_label = column_rename_map[col]                     # unchanged (user-entered) label
-                show_label = apply_case(raw_label, case_option)        # cased for display
-                value = apply_case(clean_value(row.get(col, "")), case_option)
+    # ---------- DOCX Builder ----------
+    def render_sample(container, row):
+        add_line(container, apply_case("TO:", case_option), to_label_size, bold=bold_to_label)
+        for col in to_columns:
+            raw_label = column_rename_map[col]
+            show_label = apply_case(raw_label, case_option)
+            value = apply_case(clean_value(row.get(col, "")), case_option)
+            make_bold = raw_label in bold_to_fields
+            add_line(container, f"{show_label}: {value}", to_data_size, bold=make_bold)
+            if raw_label in blankline_after:
+                container.add_paragraph()
+        if use_from:
+            add_line(container, apply_case("FROM:", case_option), from_label_size, bold=bold_from_label)
+            from_value = apply_case(clean_value(row.get(from_column, "")), case_option)
+            add_line(container, from_value, from_data_size, bold=bold_from_line)
 
-                bold_line = raw_label in bold_to_fields                # compare with RAW label (fixes earlier bug)
-                line_html = f"<div style='font-size:{to_data_size}px; font-weight:{'700' if bold_line else '400'}'>{show_label}: {value}</div>"
-                st.markdown(line_html, unsafe_allow_html=True)
-
-                if raw_label in blankline_after:
-                    st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)  # small blank gap
-
-            # FROM section (optional)
-            if use_from:
-                from_label_disp = apply_case("FROM:", case_option)
-                st.markdown(
-                    f"<div style='margin-top:8px; font-size:{from_label_size}px; font-weight:{'700' if bold_from_label else '400'}'>{from_label_disp}</div>",
-                    unsafe_allow_html=True
-                )
-                from_value = apply_case(clean_value(row.get(from_column, "")), case_option)
-                st.markdown(
-                    f"<div style='font-size:{from_data_size}px; font-weight:{'700' if bold_from_line else '400'}'>{from_value}</div>",
-                    unsafe_allow_html=True
-                )
-
-            st.markdown("<hr>", unsafe_allow_html=True)
-
-    # ---------- Create DOCX ----------
     def build_doc(full_df: pd.DataFrame) -> BytesIO:
         doc = Document()
 
-        for _, row in full_df.iterrows():
-            # TO label
-            add_line(doc, apply_case("TO:", case_option), to_label_size, bold=bold_to_label)
+        if layout_choice == "1 per page":
+            for _, row in full_df.iterrows():
+                render_sample(doc, row)
+                doc.add_page_break()
 
-            # TO lines
-            for col in to_columns:
-                raw_label = column_rename_map[col]  # unchanged label
-                show_label = apply_case(raw_label, case_option)
-                value = apply_case(clean_value(row.get(col, "")), case_option)
+        else:
+            # decide table size
+            if layout_choice == "4 per page (2×2)":
+                rows_per_page, cols_per_page = 2, 2
+            else:  # 8 per page
+                rows_per_page, cols_per_page = 4, 2
 
-                # Entire line bold if user selected the RAW label
-                make_bold = raw_label in bold_to_fields
-                add_line(doc, f"{show_label}: {value}", to_data_size, bold=make_bold)
+            table = None
+            count = 0
+            for _, row in full_df.iterrows():
+                if count % (rows_per_page * cols_per_page) == 0:
+                    if count > 0:
+                        doc.add_page_break()
+                    table = doc.add_table(rows=rows_per_page, cols=cols_per_page)
+                    for r in table.rows:
+                        for c in r.cells:
+                            c.vertical_alignment = WD_ALIGN_VERTICAL.TOP
+                            c.text = ""  # clear default
 
-                # Blank line after certain fields
-                if raw_label in blankline_after:
-                    doc.add_paragraph()
-
-            # FROM section (optional)
-            if use_from:
-                add_line(doc, apply_case("FROM:", case_option), from_label_size, bold=bold_from_label)
-                from_value = apply_case(clean_value(row.get(from_column, "")), case_option)
-                add_line(doc, from_value, from_data_size, bold=bold_from_line)
-
-            # Page break per record
-            doc.add_page_break()
-
-            # (Optional) remove the last page break later if needed
+                r = (count // cols_per_page) % rows_per_page
+                c = count % cols_per_page
+                cell = table.cell(r, c)
+                render_sample(cell, row)
+                count += 1
 
         buf = BytesIO()
         doc.save(buf)
